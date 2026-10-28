@@ -1,0 +1,72 @@
+
+name: Build SAKHI PDF Master APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Android project ZIP
+        run: |
+          if [ -f "SAKHI-PDF-Size-Master-Android-Project.zip" ]; then
+            unzip -o "SAKHI-PDF-Size-Master-Android-Project.zip" -d extracted
+          else
+            echo "Android project ZIP not found"
+            exit 1
+          fi
+
+      - name: Locate Android project
+        run: |
+          PROJECT_DIR=$(find extracted -name settings.gradle.kts -type f -print -quit | xargs -r dirname)
+          if [ -z "$PROJECT_DIR" ]; then
+            PROJECT_DIR=$(find extracted -name settings.gradle -type f -print -quit | xargs -r dirname)
+          fi
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "Could not find settings.gradle(.kts) inside ZIP"
+            find extracted -maxdepth 4 -type f | head -200
+            exit 1
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project at $PROJECT_DIR"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR"
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SAKHI-PDF-Size-Master
+          path: |
+            extracted/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
